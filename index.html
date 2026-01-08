@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markaz HR Process Mining - Bottleneck Analysis</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0f1419;
+            color: #e7e9ea;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1f2e 0%, #0f1419 100%);
+            padding: 20px 40px;
+            border-bottom: 1px solid #2f3542;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            background: linear-gradient(90deg, #00d4ff, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header-stats {
+            display: flex;
+            gap: 30px;
+        }
+        .stat-item {
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #00d4ff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #8899a6;
+            text-transform: uppercase;
+        }
+        .tabs {
+            display: flex;
+            background: #1a1f2e;
+            padding: 10px 40px;
+            gap: 10px;
+            border-bottom: 1px solid #2f3542;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            color: #8899a6;
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .tab:hover {
+            background: #2f3542;
+            color: #e7e9ea;
+        }
+        .tab.active {
+            background: linear-gradient(135deg, #7c3aed 0%, #00d4ff 100%);
+            color: white;
+        }
+        .main-content {
+            display: flex;
+            height: calc(100vh - 140px);
+        }
+        .graph-container {
+            flex: 1;
+            position: relative;
+        }
+        #cy {
+            width: 100%;
+            height: 100%;
+            background: #0f1419;
+        }
+        .sidebar {
+            width: 350px;
+            background: #1a1f2e;
+            border-left: 1px solid #2f3542;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .sidebar h2 {
+            font-size: 16px;
+            color: #00d4ff;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2f3542;
+        }
+        .legend {
+            margin-bottom: 25px;
+        }
+        .legend-title {
+            font-size: 12px;
+            color: #8899a6;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        .bottleneck-card {
+            background: #252d3a;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 12px;
+            border-left: 4px solid;
+        }
+        .bottleneck-card.critical {
+            border-color: #ef4444;
+        }
+        .bottleneck-card.high {
+            border-color: #f59e0b;
+        }
+        .bottleneck-card.medium {
+            border-color: #eab308;
+        }
+        .bottleneck-card h3 {
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        .bottleneck-card .metric {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #8899a6;
+            margin-top: 5px;
+        }
+        .bottleneck-card .metric-value {
+            color: #e7e9ea;
+            font-weight: 600;
+        }
+        .root-cause {
+            background: rgba(124, 58, 237, 0.15);
+            border-left: 3px solid #7c3aed;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 0 6px 6px 0;
+        }
+        .root-cause-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #7c3aed;
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .root-cause-title::before {
+            content: "?";
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            background: #7c3aed;
+            color: white;
+            border-radius: 50%;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        .root-cause-text {
+            font-size: 12px;
+            color: #e7e9ea;
+            line-height: 1.5;
+        }
+        .root-cause-text strong {
+            color: #00d4ff;
+        }
+        .recommendation {
+            background: rgba(34, 197, 94, 0.15);
+            border-left: 3px solid #22c55e;
+            padding: 8px 10px;
+            margin-top: 8px;
+            border-radius: 0 6px 6px 0;
+            font-size: 11px;
+            color: #22c55e;
+        }
+        .recommendation::before {
+            content: "Action: ";
+            font-weight: 600;
+        }
+        .severity-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-left: 8px;
+        }
+        .severity-badge.critical {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+        .severity-badge.high {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }
+        .severity-badge.medium {
+            background: rgba(234, 179, 8, 0.2);
+            color: #eab308;
+        }
+        .process-stats {
+            background: #252d3a;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .process-stats h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #e7e9ea;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #2f3542;
+            font-size: 13px;
+        }
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+        .stat-row .label {
+            color: #8899a6;
+        }
+        .stat-row .value {
+            font-weight: 600;
+        }
+        .stat-row .value.good {
+            color: #22c55e;
+        }
+        .stat-row .value.warning {
+            color: #f59e0b;
+        }
+        .stat-row .value.bad {
+            color: #ef4444;
+        }
+        .tooltip {
+            position: absolute;
+            background: #252d3a;
+            border: 1px solid #2f3542;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            max-width: 250px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            display: none;
+        }
+        .tooltip h4 {
+            color: #00d4ff;
+            margin-bottom: 8px;
+        }
+        .tooltip p {
+            color: #8899a6;
+            margin-bottom: 4px;
+        }
+        .tooltip .value {
+            color: #e7e9ea;
+            font-weight: 600;
+        }
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+        .control-btn {
+            background: #252d3a;
+            border: 1px solid #2f3542;
+            color: #e7e9ea;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+        .control-btn:hover {
+            background: #2f3542;
+            border-color: #00d4ff;
+        }
+        .process-hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>Markaz HR Process Mining Dashboard</h1>
+            <div style="font-size: 11px; color: #8899a6; margin-top: 4px;">Last updated: January 8, 2026 | Data-driven bottleneck analysis with root cause insights</div>
+        </div>
+        <div class="header-stats">
+            <div class="stat-item">
+                <div class="stat-value">1,598</div>
+                <div class="stat-label">Total Cases</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">6</div>
+                <div class="stat-label">Processes</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">7</div>
+                <div class="stat-label">Critical Bottlenecks</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" data-process="leave">Leave Request</button>
+        <button class="tab" data-process="recruitment">Recruitment</button>
+        <button class="tab" data-process="overtime">Overtime</button>
+        <button class="tab" data-process="loan">Loan Request</button>
+        <button class="tab" data-process="advance">Advance Request</button>
+        <button class="tab" data-process="assessment">Assessments</button>
+    </div>
+
+    <div class="main-content">
+        <div class="graph-container">
+            <div class="controls">
+                <button class="control-btn" onclick="cy.fit()">Fit View</button>
+                <button class="control-btn" onclick="cy.zoom(cy.zoom() * 1.2)">Zoom In</button>
+                <button class="control-btn" onclick="cy.zoom(cy.zoom() * 0.8)">Zoom Out</button>
+                <button class="control-btn" onclick="highlightBottlenecks()">Highlight Bottlenecks</button>
+            </div>
+            <div id="cy"></div>
+            <div class="tooltip" id="tooltip"></div>
+        </div>
+
+        <div class="sidebar">
+            <div class="legend">
+                <div class="legend-title">Node Color = Avg Wait Time</div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #22c55e;"></div>
+                    <span>&lt; 24 hours (Fast)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #eab308;"></div>
+                    <span>24-72 hours (Normal)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f59e0b;"></div>
+                    <span>72-168 hours (Slow)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ef4444;"></div>
+                    <span>&gt; 168 hours (Critical)</span>
+                </div>
+                <div class="legend-title" style="margin-top: 15px;">Edge Thickness = Volume</div>
+                <div class="legend-item">
+                    <div style="width: 40px; height: 2px; background: #00d4ff;"></div>
+                    <span>Low volume</span>
+                </div>
+                <div class="legend-item">
+                    <div style="width: 40px; height: 6px; background: #00d4ff;"></div>
+                    <span>Medium volume</span>
+                </div>
+                <div class="legend-item">
+                    <div style="width: 40px; height: 12px; background: #00d4ff;"></div>
+                    <span>High volume</span>
+                </div>
+            </div>
+
+            <h2>Process Statistics</h2>
+            <div class="process-stats" id="process-stats">
+                <!-- Filled by JavaScript -->
+            </div>
+
+            <h2>Critical Bottlenecks</h2>
+            <div id="bottlenecks">
+                <!-- Filled by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Process data with bottleneck metrics
+        const processData = {
+            leave: {
+                name: "Leave Request",
+                stats: {
+                    totalCases: 844,
+                    avgCycleTime: "144 hrs",
+                    completionRate: "96.2%",
+                    pendingCases: 24,
+                    oldestPending: "146 days"
+                },
+                nodes: [
+                    { id: 'start', label: 'Start', type: 'start', cases: 844, avgTime: 0 },
+                    { id: 'submitted', label: 'Submitted', type: 'activity', cases: 844, avgTime: 0 },
+                    { id: 'pending', label: 'Pending Review', type: 'activity', cases: 844, avgTime: 144, bottleneck: true },
+                    { id: 'approved', label: 'Approved', type: 'end-success', cases: 811, avgTime: 0 },
+                    { id: 'rejected', label: 'Rejected', type: 'end-fail', cases: 8, avgTime: 296 },
+                    { id: 'stuck', label: 'Still Pending', type: 'end-warning', cases: 24, avgTime: 3500, bottleneck: true, critical: true }
+                ],
+                edges: [
+                    { source: 'start', target: 'submitted', volume: 844 },
+                    { source: 'submitted', target: 'pending', volume: 844 },
+                    { source: 'pending', target: 'approved', volume: 811 },
+                    { source: 'pending', target: 'rejected', volume: 8 },
+                    { source: 'pending', target: 'stuck', volume: 24 }
+                ],
+                bottlenecks: [
+                    {
+                        name: 'Leave #116 - Medical',
+                        severity: 'critical',
+                        waitTime: '146 days',
+                        employee: 'Tehniat Taqdees Masood',
+                        rootCause: 'Reports to <strong>Summaya Shakur</strong> who has avg approval time of <strong>78 days</strong> (1,877 hrs) - significantly slower than company avg of 6 days. Same manager has 3 pending requests.',
+                        recommendation: 'Escalate to HR Director immediately. Consider reassigning approval authority.'
+                    },
+                    {
+                        name: 'Leave #426 - Annual',
+                        severity: 'critical',
+                        waitTime: '79 days',
+                        employee: 'Sohaib Danish',
+                        rootCause: 'Also reports to <strong>Summaya Shakur</strong> - pattern indicates systemic issue with this approver. Both top-stuck requests have same manager.',
+                        recommendation: 'Implement auto-escalation rule: if manager has >2 pending requests over 7 days, escalate to skip-level.'
+                    },
+                    {
+                        name: 'Medical Leave Approval',
+                        severity: 'high',
+                        waitTime: '7.5 days avg',
+                        cases: 279,
+                        rootCause: 'Medical leave takes <strong>56% longer</strong> than Annual leave (7.5 vs 4.8 days). Likely due to documentation requirements or medical certificate verification delays.',
+                        recommendation: 'Streamline medical documentation process. Allow provisional approval pending docs.'
+                    },
+                    {
+                        name: 'Grant Leave Approval',
+                        severity: 'high',
+                        waitTime: '7.4 days avg',
+                        cases: 85,
+                        rootCause: 'Grant leave has additional approval complexity. May require budget verification or HR policy checks that add processing time.',
+                        recommendation: 'Pre-approve grant leave allocations quarterly to speed individual requests.'
+                    }
+                ]
+            },
+            recruitment: {
+                name: "Recruitment",
+                stats: {
+                    totalCases: 547,
+                    avgCycleTime: "287 hrs",
+                    completionRate: "0.73%",
+                    pendingCases: 378,
+                    oldestPending: "64 days"
+                },
+                nodes: [
+                    { id: 'start', label: 'Start', type: 'start', cases: 547, avgTime: 0 },
+                    { id: 'applied', label: 'Applied', type: 'activity', cases: 547, avgTime: 0 },
+                    { id: 'new', label: 'New (Unreviewed)', type: 'activity', cases: 378, avgTime: 287, bottleneck: true, critical: true },
+                    { id: 'shortlisted', label: 'Shortlisted', type: 'activity', cases: 38, avgTime: 417 },
+                    { id: 'case_study', label: 'Case Study', type: 'activity', cases: 9, avgTime: 800, bottleneck: true },
+                    { id: 'gwc', label: 'GWC Interview', type: 'activity', cases: 5, avgTime: 200 },
+                    { id: 'offer', label: 'Offer', type: 'activity', cases: 10, avgTime: 343 },
+                    { id: 'hired', label: 'Hired', type: 'end-success', cases: 4, avgTime: 0 },
+                    { id: 'rejected', label: 'Rejected', type: 'end-fail', cases: 98, avgTime: 473 },
+                    { id: 'warm_bench', label: 'Warm Bench', type: 'end-warning', cases: 3, avgTime: 1090, bottleneck: true },
+                    { id: 'withdrawn', label: 'Withdrawn', type: 'end-fail', cases: 2, avgTime: 511 }
+                ],
+                edges: [
+                    { source: 'start', target: 'applied', volume: 547 },
+                    { source: 'applied', target: 'new', volume: 378 },
+                    { source: 'applied', target: 'shortlisted', volume: 38 },
+                    { source: 'applied', target: 'rejected', volume: 98 },
+                    { source: 'new', target: 'shortlisted', volume: 20, dashed: true },
+                    { source: 'shortlisted', target: 'case_study', volume: 9 },
+                    { source: 'shortlisted', target: 'gwc', volume: 5 },
+                    { source: 'case_study', target: 'gwc', volume: 4 },
+                    { source: 'gwc', target: 'offer', volume: 10 },
+                    { source: 'offer', target: 'hired', volume: 4 },
+                    { source: 'shortlisted', target: 'warm_bench', volume: 3 },
+                    { source: 'shortlisted', target: 'withdrawn', volume: 2 }
+                ],
+                bottlenecks: [
+                    {
+                        name: '69% Apps Unreviewed',
+                        severity: 'critical',
+                        waitTime: '12+ days avg',
+                        cases: 378,
+                        rootCause: 'Top culprits: <strong>Senior Product Manager</strong> (75/75 unreviewed, Ahmed Javed), <strong>CPD Coach</strong> (113/128, Hashir Hussain), <strong>Full Stack Dev</strong> (81/89, Mashhood Rastgar). November apps: 81% still unreviewed. Hiring managers not screening.',
+                        recommendation: 'Set 5-day SLA for initial screening. Add hiring manager accountability dashboard.'
+                    },
+                    {
+                        name: 'Case Study Stage',
+                        severity: 'high',
+                        waitTime: '33 days avg',
+                        cases: 9,
+                        rootCause: 'Candidates stuck waiting for case study evaluation. No clear owner for case study review. Candidates likely losing interest at this stage.',
+                        recommendation: 'Assign dedicated case study evaluator. Set 7-day turnaround SLA.'
+                    },
+                    {
+                        name: 'Warm Bench Limbo',
+                        severity: 'high',
+                        waitTime: '45 days avg',
+                        cases: 3,
+                        rootCause: 'Candidates marked "potential fit" but no active opening. No follow-up cadence for warm bench candidates. Risk of losing good candidates to competitors.',
+                        recommendation: 'Implement monthly warm bench touchpoint. Auto-notify when matching job opens.'
+                    },
+                    {
+                        name: 'Low Conversion Rate',
+                        severity: 'medium',
+                        waitTime: 'Only 0.73%',
+                        cases: 4,
+                        rootCause: 'Funnel drops dramatically: 547 applied → 38 shortlisted (7%) → 10 offered (1.8%) → 4 hired (0.7%). Initial screening is the biggest drop-off - suggests either poor job targeting or inadequate screening capacity.',
+                        recommendation: 'Review job posting clarity. Add AI pre-screening to prioritize top candidates.'
+                    }
+                ]
+            },
+            overtime: {
+                name: "Overtime Request",
+                stats: {
+                    totalCases: 153,
+                    avgCycleTime: "127 hrs",
+                    completionRate: "96.1%",
+                    pendingCases: 6,
+                    oldestPending: "21 days"
+                },
+                nodes: [
+                    { id: 'start', label: 'Start', type: 'start', cases: 153, avgTime: 0 },
+                    { id: 'submitted', label: 'Submitted', type: 'activity', cases: 153, avgTime: 0 },
+                    { id: 'pending', label: 'Pending Approval', type: 'activity', cases: 153, avgTime: 127, bottleneck: true },
+                    { id: 'approved', label: 'Approved', type: 'activity', cases: 146, avgTime: 0 },
+                    { id: 'payroll', label: 'Added to Payroll', type: 'end-success', cases: 141, avgTime: 24 },
+                    { id: 'rejected', label: 'Rejected', type: 'end-fail', cases: 1, avgTime: 68 },
+                    { id: 'stuck', label: 'Still Pending', type: 'end-warning', cases: 6, avgTime: 444, bottleneck: true }
+                ],
+                edges: [
+                    { source: 'start', target: 'submitted', volume: 153 },
+                    { source: 'submitted', target: 'pending', volume: 153 },
+                    { source: 'pending', target: 'approved', volume: 146 },
+                    { source: 'pending', target: 'rejected', volume: 1 },
+                    { source: 'pending', target: 'stuck', volume: 6 },
+                    { source: 'approved', target: 'payroll', volume: 141 }
+                ],
+                bottlenecks: [
+                    {
+                        name: 'November Batch Delay',
+                        severity: 'high',
+                        waitTime: '14.7 days avg',
+                        cases: 25,
+                        rootCause: 'September submissions had 7 requests approved by <strong>Momina Raja</strong> moved to November payroll, taking avg <strong>43 days</strong> (1,033 hrs). Month-end cutoff delays caused cascading effect.',
+                        recommendation: 'Set earlier submission deadlines (5 days before payroll cutoff). Auto-approve small OT amounts.'
+                    },
+                    {
+                        name: '6 Pending Requests',
+                        severity: 'medium',
+                        waitTime: '18.5 days avg',
+                        cases: 6,
+                        rootCause: 'Pending approvals span multiple managers with no escalation trigger. Some requests missed payroll cutoff and deprioritized.',
+                        recommendation: 'Implement 7-day auto-escalation. Add OT pending count to manager dashboard.'
+                    }
+                ]
+            },
+            loan: {
+                name: "Loan Request",
+                stats: {
+                    totalCases: 15,
+                    avgCycleTime: "2.9 hrs",
+                    completionRate: "93.3%",
+                    pendingCases: 1,
+                    oldestPending: "7 days"
+                },
+                nodes: [
+                    { id: 'start', label: 'Start', type: 'start', cases: 15, avgTime: 0 },
+                    { id: 'submitted', label: 'Submitted', type: 'activity', cases: 15, avgTime: 0 },
+                    { id: 'pending', label: 'Pending Approval', type: 'activity', cases: 15, avgTime: 2.9 },
+                    { id: 'approved', label: 'Approved', type: 'activity', cases: 14, avgTime: 0 },
+                    { id: 'disbursed', label: 'Disbursed', type: 'end-success', cases: 2, avgTime: 120 },
+                    { id: 'pending_disbursement', label: 'Pending Disbursement', type: 'end-warning', cases: 12, avgTime: 0 },
+                    { id: 'stuck', label: 'Still Pending', type: 'end-warning', cases: 1, avgTime: 168 }
+                ],
+                edges: [
+                    { source: 'start', target: 'submitted', volume: 15 },
+                    { source: 'submitted', target: 'pending', volume: 15 },
+                    { source: 'pending', target: 'approved', volume: 14 },
+                    { source: 'pending', target: 'stuck', volume: 1 },
+                    { source: 'approved', target: 'disbursed', volume: 2 },
+                    { source: 'approved', target: 'pending_disbursement', volume: 12 }
+                ],
+                bottlenecks: [
+                    {
+                        name: 'Disbursement Delay',
+                        severity: 'medium',
+                        waitTime: '5 days avg',
+                        cases: 12,
+                        rootCause: 'Approval is fast (2.9 hrs avg) but 12/14 approved loans still pending disbursement. Finance team processing batch monthly instead of on-demand.',
+                        recommendation: 'Switch to weekly disbursement cycle. Auto-trigger payment after approval.'
+                    }
+                ]
+            },
+            advance: {
+                name: "Advance Request",
+                stats: {
+                    totalCases: 14,
+                    avgCycleTime: "16.3 hrs",
+                    completionRate: "100%",
+                    pendingCases: 0,
+                    oldestPending: "N/A"
+                },
+                nodes: [
+                    { id: 'start', label: 'Start', type: 'start', cases: 14, avgTime: 0 },
+                    { id: 'submitted', label: 'Submitted', type: 'activity', cases: 14, avgTime: 0 },
+                    { id: 'pending', label: 'Pending Approval', type: 'activity', cases: 14, avgTime: 16.3 },
+                    { id: 'approved', label: 'Approved', type: 'activity', cases: 14, avgTime: 0 },
+                    { id: 'disbursed', label: 'Disbursed', type: 'end-success', cases: 2, avgTime: 48 },
+                    { id: 'pending_disbursement', label: 'Pending Disbursement', type: 'end-warning', cases: 12, avgTime: 0 }
+                ],
+                edges: [
+                    { source: 'start', target: 'submitted', volume: 14 },
+                    { source: 'submitted', target: 'pending', volume: 14 },
+                    { source: 'pending', target: 'approved', volume: 14 },
+                    { source: 'approved', target: 'disbursed', volume: 2 },
+                    { source: 'approved', target: 'pending_disbursement', volume: 12 }
+                ],
+                bottlenecks: []
+            },
+            assessment: {
+                name: "Assessments (GWC/PA)",
+                stats: {
+                    totalCases: 298,
+                    avgCycleTime: "23.5 hrs",
+                    completionRate: "96.6%",
+                    pendingCases: 10,
+                    oldestPending: "N/A"
+                },
+                nodes: [
+                    { id: 'start', label: 'Start', type: 'start', cases: 298, avgTime: 0 },
+                    { id: 'created', label: 'Created', type: 'activity', cases: 298, avgTime: 0 },
+                    { id: 'draft', label: 'Draft', type: 'activity', cases: 298, avgTime: 12 },
+                    { id: 'completed', label: 'Completed', type: 'end-success', cases: 288, avgTime: 0 },
+                    { id: 'in_progress', label: 'Still In Progress', type: 'end-warning', cases: 10, avgTime: 0 }
+                ],
+                edges: [
+                    { source: 'start', target: 'created', volume: 298 },
+                    { source: 'created', target: 'draft', volume: 298 },
+                    { source: 'draft', target: 'completed', volume: 288 },
+                    { source: 'draft', target: 'in_progress', volume: 10 }
+                ],
+                bottlenecks: []
+            }
+        };
+
+        let cy;
+        let currentProcess = 'leave';
+
+        function getNodeColor(avgTime, bottleneck, critical) {
+            if (critical) return '#ef4444';
+            if (avgTime > 168) return '#ef4444';  // > 7 days
+            if (avgTime > 72) return '#f59e0b';   // > 3 days
+            if (avgTime > 24) return '#eab308';   // > 1 day
+            return '#22c55e';
+        }
+
+        function getNodeShape(type) {
+            switch(type) {
+                case 'start': return 'ellipse';
+                case 'end-success': return 'round-rectangle';
+                case 'end-fail': return 'round-rectangle';
+                case 'end-warning': return 'round-rectangle';
+                default: return 'round-rectangle';
+            }
+        }
+
+        function getNodeBorderColor(type) {
+            switch(type) {
+                case 'start': return '#00d4ff';
+                case 'end-success': return '#22c55e';
+                case 'end-fail': return '#ef4444';
+                case 'end-warning': return '#f59e0b';
+                default: return '#2f3542';
+            }
+        }
+
+        function initGraph(processKey) {
+            const data = processData[processKey];
+
+            const elements = [];
+
+            // Add nodes
+            data.nodes.forEach(node => {
+                elements.push({
+                    data: {
+                        id: node.id,
+                        label: `${node.label}\n(${node.cases})`,
+                        fullLabel: node.label,
+                        cases: node.cases,
+                        avgTime: node.avgTime,
+                        bottleneck: node.bottleneck || false,
+                        critical: node.critical || false,
+                        type: node.type
+                    }
+                });
+            });
+
+            // Add edges
+            data.edges.forEach((edge, i) => {
+                elements.push({
+                    data: {
+                        id: `e${i}`,
+                        source: edge.source,
+                        target: edge.target,
+                        volume: edge.volume,
+                        dashed: edge.dashed || false
+                    }
+                });
+            });
+
+            if (cy) {
+                cy.destroy();
+            }
+
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: elements,
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'label': 'data(label)',
+                            'text-valign': 'center',
+                            'text-halign': 'center',
+                            'font-size': '11px',
+                            'font-weight': '500',
+                            'color': '#e7e9ea',
+                            'text-wrap': 'wrap',
+                            'text-max-width': '100px',
+                            'width': function(ele) {
+                                const cases = ele.data('cases');
+                                return Math.max(80, Math.min(150, 50 + cases * 0.1));
+                            },
+                            'height': function(ele) {
+                                const cases = ele.data('cases');
+                                return Math.max(50, Math.min(80, 40 + cases * 0.05));
+                            },
+                            'background-color': function(ele) {
+                                return getNodeColor(ele.data('avgTime'), ele.data('bottleneck'), ele.data('critical'));
+                            },
+                            'border-width': function(ele) {
+                                return ele.data('bottleneck') ? 4 : 2;
+                            },
+                            'border-color': function(ele) {
+                                if (ele.data('critical')) return '#ef4444';
+                                if (ele.data('bottleneck')) return '#f59e0b';
+                                return getNodeBorderColor(ele.data('type'));
+                            },
+                            'shape': function(ele) {
+                                return getNodeShape(ele.data('type'));
+                            }
+                        }
+                    },
+                    {
+                        selector: 'node[type = "start"]',
+                        style: {
+                            'background-color': '#1a1f2e',
+                            'border-color': '#00d4ff',
+                            'border-width': 3,
+                            'width': 60,
+                            'height': 60
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': function(ele) {
+                                const vol = ele.data('volume');
+                                return Math.max(2, Math.min(15, vol * 0.02));
+                            },
+                            'line-color': '#00d4ff',
+                            'target-arrow-color': '#00d4ff',
+                            'target-arrow-shape': 'triangle',
+                            'curve-style': 'bezier',
+                            'opacity': 0.7,
+                            'arrow-scale': 1.2
+                        }
+                    },
+                    {
+                        selector: 'edge[dashed]',
+                        style: {
+                            'line-style': 'dashed',
+                            'opacity': 0.4
+                        }
+                    },
+                    {
+                        selector: 'node:selected',
+                        style: {
+                            'border-width': 4,
+                            'border-color': '#7c3aed'
+                        }
+                    },
+                    {
+                        selector: '.highlighted',
+                        style: {
+                            'border-width': 6,
+                            'border-color': '#ef4444',
+                            'background-color': '#ef4444',
+                            'z-index': 999
+                        }
+                    }
+                ],
+                layout: {
+                    name: 'dagre',
+                    rankDir: 'LR',
+                    nodeSep: 80,
+                    rankSep: 120,
+                    padding: 50
+                }
+            });
+
+            // Add hover tooltips
+            const tooltip = document.getElementById('tooltip');
+
+            cy.on('mouseover', 'node', function(e) {
+                const node = e.target;
+                const data = node.data();
+
+                let timeDisplay = data.avgTime > 0 ?
+                    (data.avgTime >= 24 ? `${(data.avgTime / 24).toFixed(1)} days` : `${data.avgTime.toFixed(1)} hrs`) :
+                    'N/A';
+
+                tooltip.innerHTML = `
+                    <h4>${data.fullLabel}</h4>
+                    <p>Cases: <span class="value">${data.cases}</span></p>
+                    <p>Avg Wait Time: <span class="value">${timeDisplay}</span></p>
+                    ${data.bottleneck ? '<p style="color: #ef4444; font-weight: 600;">BOTTLENECK DETECTED</p>' : ''}
+                `;
+                tooltip.style.display = 'block';
+                tooltip.style.left = (e.renderedPosition.x + 20) + 'px';
+                tooltip.style.top = (e.renderedPosition.y + 140) + 'px';
+            });
+
+            cy.on('mouseout', 'node', function() {
+                tooltip.style.display = 'none';
+            });
+
+            // Update sidebar
+            updateSidebar(data);
+        }
+
+        function updateSidebar(data) {
+            // Update stats
+            const statsHtml = `
+                <h3>${data.name}</h3>
+                <div class="stat-row">
+                    <span class="label">Total Cases</span>
+                    <span class="value">${data.stats.totalCases}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="label">Avg Cycle Time</span>
+                    <span class="value ${parseFloat(data.stats.avgCycleTime) > 100 ? 'warning' : 'good'}">${data.stats.avgCycleTime}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="label">Completion Rate</span>
+                    <span class="value ${parseFloat(data.stats.completionRate) < 50 ? 'bad' : 'good'}">${data.stats.completionRate}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="label">Pending Cases</span>
+                    <span class="value ${data.stats.pendingCases > 10 ? 'bad' : data.stats.pendingCases > 0 ? 'warning' : 'good'}">${data.stats.pendingCases}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="label">Oldest Pending</span>
+                    <span class="value ${data.stats.oldestPending !== 'N/A' && parseInt(data.stats.oldestPending) > 30 ? 'bad' : ''}">${data.stats.oldestPending}</span>
+                </div>
+            `;
+            document.getElementById('process-stats').innerHTML = statsHtml;
+
+            // Update bottlenecks
+            let bottlenecksHtml = '';
+            if (data.bottlenecks.length === 0) {
+                bottlenecksHtml = '<p style="color: #22c55e; text-align: center; padding: 20px;">No critical bottlenecks detected!</p>';
+            } else {
+                data.bottlenecks.forEach(b => {
+                    bottlenecksHtml += `
+                        <div class="bottleneck-card ${b.severity}">
+                            <h3>${b.name}<span class="severity-badge ${b.severity}">${b.severity}</span></h3>
+                            <div class="metric">
+                                <span>Wait Time</span>
+                                <span class="metric-value">${b.waitTime}</span>
+                            </div>
+                            ${b.employee ? `<div class="metric"><span>Employee</span><span class="metric-value">${b.employee}</span></div>` : ''}
+                            ${b.cases ? `<div class="metric"><span>Affected Cases</span><span class="metric-value">${b.cases}</span></div>` : ''}
+                            ${b.rootCause ? `
+                                <div class="root-cause">
+                                    <div class="root-cause-title">Why is this happening?</div>
+                                    <div class="root-cause-text">${b.rootCause}</div>
+                                </div>
+                            ` : ''}
+                            ${b.recommendation ? `<div class="recommendation">${b.recommendation}</div>` : ''}
+                        </div>
+                    `;
+                });
+            }
+            document.getElementById('bottlenecks').innerHTML = bottlenecksHtml;
+        }
+
+        function highlightBottlenecks() {
+            cy.nodes().forEach(node => {
+                if (node.data('bottleneck')) {
+                    node.addClass('highlighted');
+                    setTimeout(() => node.removeClass('highlighted'), 2000);
+                }
+            });
+        }
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                currentProcess = this.dataset.process;
+                initGraph(currentProcess);
+            });
+        });
+
+        // Initialize
+        initGraph('leave');
+    </script>
+</body>
+</html>
